@@ -2,7 +2,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
 
-def build_vector_store(docs):
+def build_vector_store(docs, persist_directory="./chroma_db"):
     embeddings = HuggingFaceEmbeddings()
-    db = Chroma.from_documents(docs, embeddings, persist_directory="./chroma_db")
+    db = Chroma.from_documents(docs, embeddings, persist_directory)
     return db

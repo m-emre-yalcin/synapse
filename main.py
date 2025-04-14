@@ -1,5 +1,6 @@
 import os
 import time
+import shutil
 from rich.console import Console
 from rich.markdown import Markdown
 from typing import Dict, Any, List
@@ -10,9 +11,8 @@ from core.llm import get_vertex_llm
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-import pickle
 import hashlib
-import os.path
+import json
 
 
 def calculate_docs_hash(docs: List) -> str:
@@ -26,7 +26,7 @@ def calculate_docs_hash(docs: List) -> str:
 def create_personal_ai_helper(
     folder_path: str,
     glob_pattern: str = "**/*.md",
-    vector_store_path: str = "vector_store.pkl",
+    persist_directory: str = "./chroma_db",
 ) -> Dict[str, Any]:
     """
     Creates a personal AI helper that acts as a therapist, teacher, and friend.
@@ -34,7 +34,7 @@ def create_personal_ai_helper(
     Args:
         folder_path: Path to the folder containing personal notes
         glob_pattern: File pattern to match (default: all markdown files)
-        vector_store_path: Path to save/load the vector store
+        persist_directory: Directory to persist the Chroma vector store
 
     Returns:
         Dictionary containing the QA chain and metadata
@@ -54,54 +54,56 @@ def create_personal_ai_helper(
 
     # Calculate hash of current documents
     docs_hash = calculate_docs_hash(docs)
+    hash_file = os.path.join(persist_directory, "docs_hash.json")
 
     # Check if we have a saved vector store and if it matches our current documents
-    db = None
-    vector_store_exists = os.path.exists(vector_store_path)
-
-    if vector_store_exists:
+    rebuild_db = True
+    if os.path.exists(persist_directory) and os.path.exists(hash_file):
         try:
             console.print(
-                "Found existing vector store, checking if it's current...",
-                style="yellow",
+                "Found existing Chroma DB, checking if it's current...", style="yellow"
             )
-            # Load the hash from the companion file
-            hash_file = f"{vector_store_path}.hash"
-            if os.path.exists(hash_file):
-                with open(hash_file, "r") as f:
-                    saved_hash = f.read().strip()
 
-                if saved_hash == docs_hash:
-                    console.print("Loading existing vector store...", style="green")
-                    with open(vector_store_path, "rb") as f:
-                        db = pickle.load(f)
-                    console.print("Vector store loaded from cache", style="green")
-                else:
-                    console.print(
-                        "Documents have changed, rebuilding vector store...",
-                        style="yellow",
-                    )
+            # Load the hash from the json file
+            with open(hash_file, "r") as f:
+                hash_data = json.load(f)
+                saved_hash = hash_data.get("hash", "")
+
+            if saved_hash == docs_hash:
+                console.print(
+                    "Documents unchanged, using existing Chroma DB", style="green"
+                )
+                rebuild_db = False
             else:
                 console.print(
-                    "No hash file found, rebuilding vector store...", style="yellow"
+                    "Documents have changed, rebuilding Chroma DB...", style="yellow"
                 )
+                # Remove the old database directory
+                shutil.rmtree(persist_directory, ignore_errors=True)
         except Exception as e:
-            console.print(f"Error loading vector store: {e}", style="red")
-            console.print("Will rebuild vector store from scratch", style="yellow")
+            console.print(f"Error checking vector store: {e}", style="red")
+            console.print("Will rebuild Chroma DB from scratch", style="yellow")
+            # Remove the old database directory if there was an error
+            shutil.rmtree(persist_directory, ignore_errors=True)
 
-    # If no valid vector store was loaded, build a new one
-    if db is None:
-        console.print("Building new vector store...", style="yellow")
-        db = build_vector_store(docs)
+    # Build a new vector store if needed
+    if rebuild_db:
+        console.print("Building new Chroma vector store...", style="yellow")
+        # Make sure the persist directory exists
+        os.makedirs(persist_directory, exist_ok=True)
 
-        # Save the vector store and its hash
-        with open(vector_store_path, "wb") as f:
-            pickle.dump(db, f)
+        # Build the vector store
+        db = build_vector_store(docs, persist_directory=persist_directory)
 
-        with open(f"{vector_store_path}.hash", "w") as f:
-            f.write(docs_hash)
+        # Save the hash
+        with open(hash_file, "w") as f:
+            json.dump({"hash": docs_hash, "timestamp": time.time()}, f)
 
-        console.print("Vector store built and saved", style="green")
+        console.print("Chroma DB built and saved", style="green")
+    else:
+        # Use your build_vector_store with an existing directory
+        # We don't need to rebuild since Chroma handles persistence
+        db = build_vector_store(docs, persist_directory=persist_directory)
 
     # Set up retriever with reasonable defaults
     retriever = db.as_retriever(search_kwargs={"k": 5})
@@ -182,10 +184,8 @@ def interactive_session(helper_system: Dict[str, Any]):
             break
 
         try:
-            # Process the user's input through the QA chain
+            # Show processing indicator
             console.print("\n[AI Helper]: ", end="")
-
-            # Show a spinner or some indication that processing is happening
             console.print("Thinking...", style="dim")
 
             # Process the query
@@ -213,21 +213,22 @@ if __name__ == "__main__":
     # Load environment variables
     load_dotenv()
 
-    # Get notes path from environment variable or use default
+    # Get configuration from environment variables or use defaults
     notes_path = os.getenv(
-        "NOTES_PATH", os.path.expanduser("~/Desktop/Emre's All Notes/Google Keep")
+        "NOTES_PATH",
+        os.path.expanduser("/Users/emreyalcin/Desktop/Emre's\ All\ Notes/Google\ Keep"),
     )
-    vector_store_path = os.getenv("VECTOR_STORE_PATH", "vector_store.pkl")
+    chroma_db_path = os.getenv("CHROMA_DB_PATH", "./chroma_db")
+
+    # Set environment variable to avoid tokenizer parallelism warnings
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # Create the personal AI helper system
     helper = create_personal_ai_helper(
         folder_path=notes_path,
         glob_pattern=os.getenv("NOTES_GLOB", "**/*.md"),
-        vector_store_path=vector_store_path,
+        persist_directory=chroma_db_path,
     )
-
-    # Set environment variable to avoid tokenizer parallelism warnings
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # Start the interactive session
     interactive_session(helper)
