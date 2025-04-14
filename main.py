@@ -93,7 +93,9 @@ def create_personal_ai_helper(
         os.makedirs(persist_directory, exist_ok=True)
 
         # Build the vector store
-        db = build_vector_store(docs, persist_directory=persist_directory)
+        db = build_vector_store(
+            docs, persist_directory=persist_directory, rebuilt_db=True
+        )
 
         # Save the hash
         with open(hash_file, "w") as f:
@@ -103,7 +105,9 @@ def create_personal_ai_helper(
     else:
         # Use your build_vector_store with an existing directory
         # We don't need to rebuild since Chroma handles persistence
-        db = build_vector_store(docs, persist_directory=persist_directory)
+        db = build_vector_store(
+            docs, persist_directory=persist_directory, rebuilt_db=False
+        )
 
     # Set up retriever with reasonable defaults
     retriever = db.as_retriever(search_kwargs={"k": 5})
