@@ -1,10 +1,11 @@
-from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
 
 
 def build_vector_store(docs, persist_directory="./chroma_db", rebuilt_db=False):
     db = None
-    embeddings = HuggingFaceEmbeddings()
+    embeddings = OpenAIEmbeddings()
 
     if rebuilt_db:
         db = Chroma.from_documents(

@@ -10,7 +10,9 @@ def get_vertex_llm():
         model_name="gemini-2.5-pro-preview-03-25",
         project=os.getenv("PROJECT_ID"),
         location=os.getenv("REGION"),
-        max_output_tokens=2048,
-        temperature=0.8,
+        max_output_tokens=8192,
+        temperature=0.5,
+        top_p=0.95,
+        top_k=40,
     )
     return llm
