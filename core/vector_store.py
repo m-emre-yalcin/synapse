@@ -5,18 +5,18 @@ from langchain_openai import OpenAIEmbeddings
 
 def build_vector_store(docs, persist_directory="./chroma_db", rebuilt_db=False):
     db = None
-    embeddings = OpenAIEmbeddings()
+    embedding = OpenAIEmbeddings()
 
     if rebuilt_db:
         db = Chroma.from_documents(
-            docs=docs,
-            embeddings=embeddings,
+            documents=docs,
+            embedding=embedding,
             persist_directory=persist_directory,
         )
     else:
         db = Chroma(
             persist_directory=persist_directory,
-            embedding_function=embeddings,
+            embedding_function=embedding,
         )
 
     return db
