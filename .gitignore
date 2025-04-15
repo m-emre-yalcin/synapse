@@ -4,3 +4,4 @@ venv
 creds
 __pycache__
 chroma_db
+history
